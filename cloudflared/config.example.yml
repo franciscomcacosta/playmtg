@@ -1,0 +1,7 @@
+# Copy to C:\Users\<you>\.cloudflared\config.yml and replace the two <...> parts.
+tunnel: playmtg
+credentials-file: C:\Users\<you>\.cloudflared\<tunnel-id>.json
+ingress:
+  - hostname: api.playmtg.online
+    service: http://localhost:8787
+  - service: http_status:404

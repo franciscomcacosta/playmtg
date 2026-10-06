@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /table
+Sitemap: https://playmtg.online/sitemap.xml

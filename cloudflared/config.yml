@@ -1,0 +1,7 @@
+# PlayMTG tunnel: api.playmtg.online -> this PC's game server
+tunnel: playmtg
+credentials-file: C:\Users\franc\.cloudflared\98612c72-3eae-4005-ab53-7733c6076d35.json
+ingress:
+  - hostname: api.playmtg.online
+    service: http://localhost:8787
+  - service: http_status:404

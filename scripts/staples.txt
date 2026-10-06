@@ -1,0 +1,251 @@
+Sol Ring
+Arcane Signet
+Command Tower
+Swords to Plowshares
+Lightning Greaves
+Cultivate
+Kodama's Reach
+Swiftfoot Boots
+Rampant Growth
+Beast Within
+Counterspell
+Path to Exile
+Chaos Warp
+Cyclonic Rift
+Rhystic Study
+Smothering Tithe
+Mystic Remora
+Esper Sentinel
+Fierce Guardianship
+Deadly Rollick
+Dark Ritual
+Demonic Tutor
+Vampiric Tutor
+Enlightened Tutor
+Mystical Tutor
+Worldly Tutor
+Sylvan Library
+Mana Crypt
+Mana Vault
+Chrome Mox
+Mox Diamond
+Jeweled Lotus
+Lotus Petal
+Ancient Tomb
+Gaea's Cradle
+Cabal Coffers
+Urborg, Tomb of Yawgmoth
+Bojuka Bog
+Reliquary Tower
+Exotic Orchard
+Path of Ancestry
+Evolving Wilds
+Terramorphic Expanse
+Fabled Passage
+Prismatic Vista
+Misty Rainforest
+Polluted Delta
+Flooded Strand
+Bloodstained Mire
+Wooded Foothills
+Windswept Heath
+Scalding Tarn
+Verdant Catacombs
+Arid Mesa
+Marsh Flats
+Overgrown Tomb
+Breeding Pool
+Watery Grave
+Godless Shrine
+Steam Vents
+Sacred Foundry
+Stomping Ground
+Blood Crypt
+Temple Garden
+Hallowed Fountain
+Thought Vessel
+Mind Stone
+Fellwar Stone
+Talisman of Dominance
+Commander's Sphere
+Wayfarer's Bauble
+Skullclamp
+Sensei's Divining Top
+Scroll Rack
+The One Ring
+Teferi's Protection
+Heroic Intervention
+Dockside Extortionist
+Eternal Witness
+Birds of Paradise
+Llanowar Elves
+Elvish Mystic
+Avacyn's Pilgrim
+Sakura-Tribe Elder
+Wood Elves
+Farseek
+Nature's Lore
+Three Visits
+Skyshroud Claim
+Explosive Vegetation
+Harmonize
+Night's Whisper
+Sign in Blood
+Read the Bones
+Phyrexian Arena
+Necropotence
+Bolas's Citadel
+Toxic Deluge
+Damnation
+Wrath of God
+Blasphemous Act
+Vandalblast
+Austere Command
+Farewell
+Anguished Unmaking
+Assassin's Trophy
+Generous Gift
+Chaos Warp
+Krosan Grip
+Nature's Claim
+Return to Dust
+Feed the Swarm
+Infernal Grasp
+Go for the Throat
+Doom Blade
+Snuff Out
+Force of Will
+Force of Negation
+Mana Drain
+Swan Song
+An Offer You Can't Refuse
+Negate
+Arcane Denial
+Pongify
+Rapid Hybridization
+Reanimate
+Animate Dead
+Necromancy
+Living Death
+Victimize
+Entomb
+Buried Alive
+Gamble
+Brainstorm
+Ponder
+Preordain
+Fact or Fiction
+Impulse
+Opt
+Consider
+Faithless Looting
+Deflecting Swat
+Jeska's Will
+Seething Song
+Rite of Flame
+Underworld Breach
+Ad Nauseam
+Thassa's Oracle
+Demonic Consultation
+Tainted Pact
+Grim Monolith
+Basalt Monolith
+Rings of Brighthearth
+Isochron Scepter
+Dramatic Reversal
+Aetherflux Reservoir
+Walking Ballista
+Craterhoof Behemoth
+Avenger of Zendikar
+Rhythm of the Wild
+Doubling Season
+Anointed Procession
+Parallel Lives
+Panharmonicon
+Purphoros, God of the Forge
+Impact Tremors
+Guardian Project
+Beast Whisperer
+Soul Warden
+Blood Artist
+Zulaport Cutthroat
+Viscera Seer
+Carrion Feeder
+Ashnod's Altar
+Phyrexian Altar
+Pitiless Plunderer
+Grave Pact
+Dictate of Erebos
+Butcher of Malakir
+Sun Titan
+Grave Titan
+Massacre Wurm
+Gray Merchant of Asphodel
+Mirkwood Bats
+Ophiomancer
+Krenko, Mob Boss
+Goblin Bombardment
+Purphoros, God of the Forge
+Smothering Tithe
+Archon of Cruelty
+Consecrated Sphinx
+Notion Thief
+Narset, Parter of Veils
+Teferi, Time Raveler
+Opposition Agent
+Drannith Magistrate
+Grand Abolisher
+Silence
+Orim's Chant
+Cyclonic Rift
+Expropriate
+Time Warp
+Temporal Manipulation
+Nexus of Fate
+Approach of the Second Sun
+Coat of Arms
+Overrun
+Triumph of the Hordes
+Finale of Devastation
+Natural Order
+Tooth and Nail
+Survival of the Fittest
+Fauna Shaman
+Green Sun's Zenith
+Chord of Calling
+Eldritch Evolution
+Birthing Pod
+Woodland Bellower
+Seedborn Muse
+Unwinding Clock
+Prophet of Kruphix
+Collected Company
+Lurking Predators
+Rishkar's Expertise
+Return of the Wildspeaker
+Elemental Bond
+Guardian Project
+Garruk's Uprising
+Season of Growth
+Welcoming Vampire
+Mentor of the Meek
+Esper Sentinel
+Toski, Bearer of Secrets
+Ohran Frostfang
+Kindred Discovery
+Vanquisher's Banner
+Herald's Horn
+Urza's Incubator
+Door of Destinies
+Patriarch's Bidding
+Cavern of Souls
+Mutavault
+Strip Mine
+Wasteland
+Ghost Quarter
+Field of the Dead
+Boseiju, Who Endures
+Otawara, Soaring City
+Sokenzan, Crucible of Defiance
+Takenuma, Abandoned Mire
+Eiganjo, Seat of the Empire

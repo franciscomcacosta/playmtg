@@ -1,0 +1,10 @@
+node_modules
+dist
+data/*.gz
+data/cards.json
+data/meta.json
+.env
+_design/
+*.log
+.snap-full.txt
+.wrangler/
