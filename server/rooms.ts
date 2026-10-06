@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { parseDeckText, type CardDb } from './cards';
 import { validateCommanderDeck, canBeCommander } from '../src/engine/ext/commander';
-import { createGame, dispatch, startGame, viewFor } from '../src/engine/engine';
+import { createGame, dispatch, startGame, viewFor, pendingBeat, resumeBeat } from '../src/engine/engine';
 import { EXT } from '../src/engine/ext';
 import type { Action, GameState, PlayerIdx } from '../src/engine/types';
 import type { CardDef } from '../src/engine/cardTypes';
@@ -34,6 +34,7 @@ export interface Room {
   mode?: string; // quick | standard | cmd | rcmd | draft | private | ai
   ranked?: boolean;
   botTimer?: ReturnType<typeof setTimeout>;
+  beatTimer?: ReturnType<typeof setTimeout>;
   spectators: Set<WebSocket>;
   paidFor?: GameState | null; // game instance already paid out
   onOver?: (room: Room) => void;
@@ -139,6 +140,11 @@ export class Rooms {
       { name: b.name, cards: b.deck, commanders: b.commanders },
     ], undefined, { format: room.format ?? 'constructed' });
     startGame(room.game);
+    // live games are paced: the engine pauses after each visible event so players can follow along
+    (room.game as any).paced = true;
+    (room.game as any).beatMark = (room.game as any).evSeq ?? 0;
+    clearTimeout(room.beatTimer);
+    room.beatTimer = undefined;
     room.rematchVotes.clear();
   }
 
@@ -167,7 +173,59 @@ export class Rooms {
         console.error('[rooms] payout failed', e);
       }
     }
+    this.scheduleBeat(room);
     this.scheduleBot(room);
+  }
+
+  /** Pace multiplier: the slowest setting among the human players (Fast 0.55 · Normal 1 · Slow 1.6). */
+  paceOf(room: Room): number {
+    const g = room.game;
+    if (!g) return 1;
+    const M: Record<string, number> = { fast: 0.55, normal: 1, slow: 1.6 };
+    let m = 0;
+    room.seats.forEach((seat, i) => {
+      if (!seat || seat.bot) return;
+      m = Math.max(m, M[(g.players[i] as any)?.pace ?? 'normal'] ?? 1);
+    });
+    return m || 1;
+  }
+
+  /** How long the events of a beat need on screen (Arena-like rhythm: the opponent's plays get a longer look). */
+  beatMs(room: Room, from: number, to: number): number {
+    const g = room.game!;
+    const bot = room.seats.findIndex((s) => s?.bot);
+    const theirs = (p: any) => p != null && (bot >= 0 ? p === bot : true);
+    let ms = 250;
+    for (const e of ((g as any).events ?? []) as any[]) {
+      if (e.seq <= from || e.seq > to) continue;
+      let d = 0;
+      switch (e.k) {
+        case 'stack': d = e.kind === 'spell' ? (theirs(e.p) ? 1500 : 750) : theirs(e.p) ? 1050 : 800; break;
+        case 'attack': d = 1100; break;
+        case 'blocks': d = 1000; break;
+        case 'damage': d = e.combat ? 1300 : 950; break;
+        case 'turn': d = 1100; break;
+        case 'move': d = e.from === 'library' && e.to === 'hand' ? 350 : e.to === 'battlefield' ? 850 : e.from === 'battlefield' ? 1000 : 600; break;
+        case 'life': case 'counter': case 'pcounter': d = 800; break;
+        case 'cascade': case 'revealHand': case 'reveal': d = 1600; break;
+        default: d = 700;
+      }
+      ms = Math.max(ms, d);
+    }
+    return Math.round(ms * this.paceOf(room));
+  }
+
+  /** A paced game paused on a beat: let it play out on screen, then carry on. */
+  scheduleBeat(room: Room) {
+    const g = room.game;
+    if (!g || g.over || room.beatTimer) return;
+    const b = pendingBeat(g);
+    if (!b) return;
+    room.beatTimer = setTimeout(() => {
+      room.beatTimer = undefined;
+      if (room.game !== g) return;
+      if (resumeBeat(g)) this.broadcast(room);
+    }, this.beatMs(room, b.from, b.to));
   }
 
   /** Let the AI seat act, one decision at a time with a short delay so humans can follow along. */
@@ -180,13 +238,16 @@ export class Rooms {
       room.rematchVotes.add(idx);
       return;
     }
+    if (pendingBeat(g)) return; // the board is still showing the last beat
     if (!aiNeedsToAct(g, idx as PlayerIdx)) return;
     const quick = !g.prompt && g.priority === idx && g.stack.length === 0 && !['main1', 'main2'].includes(g.step);
+    // the bot "thinks" a little before main-phase plays and answers, like a person would
+    const think = quick ? 150 : g.prompt ? 600 : 850;
     room.botTimer = setTimeout(() => {
       room.botTimer = undefined;
       if (room.game !== g) return;
       let acted = 0;
-      while (acted++ < 25 && aiNeedsToAct(g, idx as PlayerIdx)) {
+      while (acted++ < 25 && !pendingBeat(g) && aiNeedsToAct(g, idx as PlayerIdx)) {
         let action;
         try {
           action = aiDecide(g, idx as PlayerIdx);
@@ -200,7 +261,7 @@ export class Rooms {
         if (action.type !== 'pass') break;
       }
       this.broadcast(room);
-    }, quick ? 120 : 650);
+    }, Math.round(think * this.paceOf(room)));
   }
 
   /** Which room (and seat) a user is sitting in right now, for presence and rejoining. */

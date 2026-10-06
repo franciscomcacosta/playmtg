@@ -4,6 +4,7 @@ import type { Action, ManualOp, PlayerIdx, Step, Target, Color } from '../engine
 import { STEPS, STEP_LABEL } from '../engine/types';
 import type { CardDef } from '../engine/cardTypes';
 import { Card, cardImage } from './Card';
+import { preload, preloadIdle } from './imgcache';
 import { FX, EXILE_TINT, type Box } from './fx';
 import { searchCards, type ApiCard } from './api';
 import './board.css';
@@ -148,6 +149,17 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
           lastSeq.current = seq;
         }
         const fast = queue.current.length > 2;
+        // make sure the images of cards that just became visible (a spell cast, a card drawn, a token…) are
+        // loaded and decoded before this update is shown, so nothing pops in blank
+        {
+          const need: (string | undefined)[] = [];
+          for (const [iid, c] of Object.entries(nv.cards) as [string, any][]) {
+            if (c.hidden || c.faceDown || c.zone === 'library') continue;
+            const o = cur.cards[iid] as any;
+            if (!o || o.hidden || o.faceDown || o.face !== c.face || o.zone !== c.zone) need.push(imgIn(nv, iid));
+          }
+          if (need.length) await preload(need, fast ? 250 : 900);
+        }
         const fx = fxRef.current;
         if (fx) fx.scale = scaleRef.current;
         if (fx && evs.length && !fast) await preFx(fx, evs, cur, nv).catch(() => undefined);
@@ -180,6 +192,15 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
     queue.current.push(incoming);
     pump();
   }, [incoming, pump]);
+
+  // warm the cache with your whole deck (and everything already visible) once the game starts
+  const deckImgKey = ((incoming as any).deckImages ?? []).length + ':' + incoming.id;
+  useEffect(() => {
+    const own = ((incoming as any).deckImages ?? []) as string[];
+    const seen = Object.keys(incoming.cards).map((iid) => imgIn(incoming, iid));
+    preloadIdle([...seen, ...own]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckImgKey]);
 
   useEffect(() => {
     if (boardRef.current && fxLayerRef.current) fxRef.current = new FX(boardRef.current, fxLayerRef.current);
@@ -501,7 +522,7 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
         </>
       );
     }
-    if (img) return <img src={img} alt={nameOf(iid)} draggable={false} loading="lazy" />;
+    if (img) return <img src={img} alt={nameOf(iid)} draggable={false} decoding="async" />;
     const df = d(iid);
     if (c.token || df?.layout === 'token')
       return (
@@ -1122,6 +1143,34 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
         });
       }, fx.d(delay));
     }
+  }
+
+  // Arena-style running commentary: the last few things that happened, newest at the bottom.
+  function renderFeed() {
+    const L = (view.log ?? []) as any[];
+    const base = L.length;
+    const lines: { text: string; player?: number; kind?: string; i: number }[] = [];
+    for (let i = L.length - 1; i >= 0 && lines.length < 4; i--) {
+      const l = L[i];
+      if (!l?.text || l.kind === 'chat' || / skips the first draw/.test(l.text)) continue;
+      if (/draws? (?:a|\d+) cards?\.$/.test(l.text) && lines.length) continue;
+      lines.unshift({ ...l, i });
+    }
+    if (!lines.length) return null;
+    return (
+      <div className="actfeed" aria-live="polite">
+        {lines.map((l, k) => (
+          <div
+            key={l.i}
+            className={`af-line ${l.kind ?? ''} ${l.player === me ? 'me' : l.player === op ? 'op' : ''}`}
+            style={{ opacity: 0.4 + (0.6 * (k + 1)) / lines.length }}
+          >
+            {l.text}
+          </div>
+        ))}
+        <span hidden>{base}</span>
+      </div>
+    );
   }
 
   function imgIn(v: GameView, iid: string): string | undefined {
@@ -2015,6 +2064,7 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
 
           {/* midline */}
           <div className="midline2">
+            {renderFeed()}
             <div className="mline" style={{ background: `linear-gradient(90deg,transparent,${mine ? 'rgba(240,169,59,.28)' : 'rgba(239,90,90,.28)'} 25%,${mine ? 'rgba(240,169,59,.28)' : 'rgba(239,90,90,.28)'} 75%,transparent)` }} />
             <div className="mid-left">
               <div className="tl" style={{ color: hot }}>
@@ -2034,8 +2084,8 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
                     ⏭ Passing — stop
                   </button>
                 )}
-                <button className="pillbtn ghost" onClick={() => setSettings(true)} title="Priority stops">
-                  ⚙ Stops
+                <button className="pillbtn ghost" onClick={() => setSettings(true)} title="Game speed and priority stops">
+                  ⚙ Speed & stops
                 </button>
                 {myPrompt?.kind === 'declareAttackers' &&
                   myPrompt.targets.length > 1 &&
@@ -2215,7 +2265,7 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
       {renderMenu()}
       {tokenModal && <TokenModal onClose={() => setTokenModal(false)} onCreate={(op2) => { manual(op2); setTokenModal(false); }} />}
       {settings && myStops && (
-        <Modal title="Priority stops" onCancel={() => setSettings(false)}>
+        <Modal title="Game speed & stops" onCancel={() => setSettings(false)}>
           <p className="muted small">Like Arena, the game passes priority for you unless you have something you could play at a step where you set a stop. Opponent spells on the stack always give you a chance to respond if you can.</p>
           <div className="stops-grid">
             <div />
@@ -2228,6 +2278,17 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
                 <input type="checkbox" checked={myStops.opp.includes(s)} onChange={() => act({ type: 'setStops', own: myStops.own, opp: myStops.opp.includes(s) ? myStops.opp.filter((x) => x !== s) : [...myStops.opp, s] })} />
               </React.Fragment>
             ))}
+          </div>
+          <div className="pace-row">
+            <strong>Game speed</strong>
+            <div className="seg">
+              {(['slow', 'normal', 'fast'] as const).map((p) => (
+                <button key={p} className={((P[me] as any).pace ?? 'normal') === p ? 'on' : ''} onClick={() => act({ type: 'setPace', pace: p } as any)}>
+                  {p === 'slow' ? 'Slow' : p === 'normal' ? 'Normal' : 'Fast'}
+                </button>
+              ))}
+            </div>
+            <span className="muted small">How long each play stays on screen before the game moves on.</span>
           </div>
           <label className="row">
             <input type="checkbox" checked={!!(P[me] as any).fullControl} onChange={(e) => act({ type: 'setStops', own: myStops.own, opp: myStops.opp, fullControl: e.target.checked })} />

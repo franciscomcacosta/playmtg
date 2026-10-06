@@ -275,6 +275,7 @@ export type Action =
   | { type: 'pass' }
   | { type: 'passUntilEOT'; on: boolean }
   | { type: 'setStops'; own: Step[]; opp: Step[]; fullControl?: boolean }
+  | { type: 'setPace'; pace: 'fast' | 'normal' | 'slow' }
   | { type: 'playLand'; iid: string; face?: number }
   | { type: 'cast'; iid: string; face?: number; alt?: CastAlt; kicker?: boolean }
   | { type: 'turnFaceUp'; iid: string }

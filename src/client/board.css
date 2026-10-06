@@ -201,3 +201,17 @@
 .name-hit { display: flex; justify-content: space-between; gap: 12px; text-align: left; padding: 8px 10px; }
 .name-hit .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 .spectate-bar { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; align-items: center; gap: 14px; padding: 6px 8px 6px 18px; border-radius: 999px; background: rgba(12,15,20,.92); box-shadow: 0 0 0 1px rgba(201,160,80,.4), 0 10px 30px rgba(0,0,0,.6); font-family: Cinzel, serif; font-size: 12px; font-weight: 700; letter-spacing: .2em; color: #f7dc9a; }
+
+/* running commentary above the midline (what just happened) */
+.actfeed { position: absolute; left: 28px; bottom: calc(100% + 6px); width: min(440px, 34vw); display: flex; flex-direction: column; gap: 3px; pointer-events: none; z-index: 4; }
+.af-line { font-size: 13px; line-height: 1.3; font-weight: 600; color: #c8d0dc; padding: 3px 10px; border-radius: 8px; background: rgba(12,17,24,.78); border-left: 3px solid #4a5668; animation: afIn .35s cubic-bezier(.2,.8,.2,1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.af-line.me { border-left-color: #f0a93b; color: #f3e2c2; }
+.af-line.op { border-left-color: #ef5a5a; color: #f6c9c1; }
+.af-line.combat { font-weight: 700; }
+.af-line.turn { color: #f7dc9a; font-weight: 800; }
+@keyframes afIn { from { opacity: 0; transform: translateY(8px); } to { transform: none; } }
+.pace-row { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; margin: 4px 0 12px; }
+.pace-row .muted { grid-column: 1 / -1; }
+.seg { display: inline-flex; border: 1px solid #2e3a4a; border-radius: 10px; overflow: hidden; width: max-content; }
+.seg button { background: transparent; color: #c8d0dc; border: 0; padding: 6px 14px; font-weight: 700; cursor: pointer; }
+.seg button.on { background: #f0a93b; color: #1a1206; }

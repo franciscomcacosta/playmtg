@@ -4193,9 +4193,49 @@ function tapScan(s: GameState) {
   }
 }
 
+// --------------------------------------------------------------------------------------------
+// Pacing ("beats"): in a live game the server sets s.paced. Instead of auto-passing straight through a
+// whole chain (cast → resolve → triggers → combat damage → next step) in one update, settle() stops
+// right after something visible happened, so the client can show it. The server waits a moment and
+// calls resumeBeat(). Players can still act during a pause (it just continues from there).
+// --------------------------------------------------------------------------------------------
+// every animation event is something to look at; only pure bookkeeping kinds are skipped
+const NOT_BEAT = new Set(['chosen']);
+function beatDue(s: GameState): boolean {
+  const st = s as any;
+  if (!st.paced || st.over) return false;
+  const mark = st.beatMark ?? 0;
+  const seq = st.evSeq ?? 0;
+  if (seq <= mark) return false;
+  const evs = (st.events ?? []) as any[];
+  for (let i = evs.length - 1; i >= 0 && evs[i].seq > mark; i--) {
+    if (!NOT_BEAT.has(evs[i].k)) {
+      st.beat = { from: mark, to: seq };
+      st.beatMark = seq;
+      return true;
+    }
+  }
+  st.beatMark = seq;
+  return false;
+}
+/** The events of the pause the game is waiting on (null when not paused). */
+export function pendingBeat(s: GameState): { from: number; to: number } | null {
+  return (s as any).beat ?? null;
+}
+/** Continue a paced game after the server has let a beat play out. */
+export function resumeBeat(s: GameState): boolean {
+  const st = s as any;
+  if (!st.beat) return false;
+  st.beat = null;
+  settle(s);
+  s.version++;
+  return true;
+}
+
 /** Run the game forward until a player decision is needed. */
 export function settle(s: GameState) {
   let guard = 0;
+  (s as any).beat = null;
   while (guard++ < 2000) {
     if (s.over) return;
     tapScan(s);
@@ -4230,6 +4270,7 @@ export function settle(s: GameState) {
       continue;
     }
     if ((s as any).needAdvance) {
+      if (beatDue(s)) return;
       advanceStep(s);
       continue;
     }
@@ -4240,9 +4281,12 @@ export function settle(s: GameState) {
       continue;
     }
     if (shouldAutoPass(s, s.priority)) {
+      if (beatDue(s)) return;
       doPass(s, s.priority);
       continue;
     }
+    // stopping for a player decision: whatever happened so far is shown with this update
+    if ((s as any).paced) (s as any).beatMark = (s as any).evSeq ?? 0;
     return;
   }
   log(s, 'Engine loop guard hit — pausing automation.', undefined, 'warn');
@@ -4278,6 +4322,9 @@ export function dispatch(s: GameState, p: PlayerIdx, a: Action): string | null {
       }
       break;
     }
+    case 'setPace':
+      (P(s, p) as any).pace = ['fast', 'normal', 'slow'].includes((a as any).pace) ? (a as any).pace : 'normal';
+      break;
     case 'setStops':
       P(s, p).stops = { own: a.own, opp: a.opp };
       if (a.fullControl !== undefined) P(s, p).fullControl = a.fullControl;
@@ -4654,6 +4701,7 @@ function declareBlockers(s: GameState, p: PlayerIdx, choice: { blocker: string; 
   }
   cmb.blocksDeclared = true;
   emit(s, 'blocks', { p, list });
+  ev(s, { k: 'blocks', p, blocks: list.map((b) => ({ blocker: b.blocker, attacker: b.attacker })) });
   if (list.length) log(s, `${pname(s, p)} blocks: ${list.map((b) => `${nm(s, b.blocker)} → ${nm(s, b.attacker)}`).join(', ')}.`, p, 'combat');
   else log(s, `${pname(s, p)} doesn't block.`, p, 'combat');
   s.priority = s.active;
@@ -4842,6 +4890,20 @@ export interface CardView extends Partial<CardObj> {
   playable?: boolean;
 }
 
+function deckImagesOf(s: GameState, p: PlayerIdx): string[] {
+  const memo = ((s as any).deckImg ??= {}) as Record<number, string[]>;
+  if (memo[p]) return memo[p];
+  const out = new Set<string>();
+  for (const c of Object.values(s.cards)) {
+    if (c.owner !== p || c.token) continue;
+    const d = s.defs[c.defId];
+    if (!d) continue;
+    if (d.image) out.add(d.image);
+    for (const f of d.faces ?? []) if (f.image) out.add(f.image);
+  }
+  return (memo[p] = [...out]);
+}
+
 export function viewFor(s: GameState, viewer: PlayerIdx | null) {
   const visible = (c: CardObj): boolean => {
     if (c.zone === 'battlefield') return !c.faceDown || c.controller === viewer;
@@ -4903,6 +4965,7 @@ export function viewFor(s: GameState, viewer: PlayerIdx | null) {
     library: [] as string[],
     libraryCount: p.library.length,
     stops: p.idx === viewer ? p.stops : undefined,
+    pace: p.idx === viewer ? (p as any).pace ?? 'normal' : undefined,
     libraryTop: revealedTops.get(p.idx) ?? (p.idx === viewer ? [...topPeek][0] : undefined),
     monarch: (s as any).monarch === p.idx,
     command: (p as any).command ?? [],
@@ -4923,6 +4986,8 @@ export function viewFor(s: GameState, viewer: PlayerIdx | null) {
     startingPlayer: s.startingPlayer, step: s.step, stepLabel: STEP_LABEL[s.step], priority: s.priority, players, cards, defs,
     battlefield: s.battlefield, stack: s.stack.map((it) => ({ ...it, effects: undefined, specs: undefined })), combat: s.combat,
     prompt, casting, log: s.log.slice(-150), manualNotice: s.manualNotice, you: viewer,
+    // your own deck's card images (never the opponent's), so the client can load them before you draw them
+    deckImages: viewer != null ? deckImagesOf(s, viewer) : undefined,
     canPlay: viewer != null && s.priority === viewer && !s.prompt ? canPlaySomething(s, viewer) : false,
     landsPlayed: viewer != null ? P(s, viewer).landsPlayed : 0, landsAllowed: viewer != null ? landsAllowed(s, viewer) : 1,
     dayNight: s.dayNight,
