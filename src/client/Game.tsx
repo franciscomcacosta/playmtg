@@ -902,10 +902,14 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
       const back = n - 1 - i;
       return { left: cx - w / 2 - back * 110, top: cy - h / 2 - 20 + back * 24, width: w, height: h };
     }
+    // Resting stack: a column on the right, kept clear of the phase dial / Resolve button (which sit on the
+    // middle bar at the right edge), so you can always see the stack and still respond or resolve.
     const w = 150;
     const h = 209;
-    const total = h + (n - 1) * 64;
-    return { left: W - 24 - w - 8, top: H / 2 - total / 2 - 20 + i * 64, width: w, height: h };
+    const step = 64;
+    const total = h + (n - 1) * step;
+    const top = Math.max(96, Math.min(H / 2 - total / 2 - 20, H - 260 - total));
+    return { left: W - 24 - w - 340, top: top + i * step, width: w, height: h };
   };
   const renderSpot = () =>
     stackItems.slice(-6).map((it, i, arr) => {
