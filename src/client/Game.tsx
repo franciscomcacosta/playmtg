@@ -675,7 +675,9 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
   const areaH = matH - landRowH;
   const avail = Math.max(400, W - 48 - 90);
   const need = Math.max(extent(creatureGroups(me, 1)), extent(creatureGroups(op, 1)), 1);
-  const K = Math.max(0.5, Math.min(1, avail / need, (areaH - 18) / 156));
+  // creatures sit LIFT px away from the middle bar: attacking / blocking cards slide toward it by up to 28px
+  const LIFT = 32;
+  const K = Math.max(0.45, Math.min(1, avail / need, (areaH - 10 - LIFT) / 156));
 
   const renderLandRow = (p: PlayerIdx) => {
     const lands = stacks(p, isLand);
@@ -717,7 +719,7 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
         {gs.map((g) => {
           const attH = g.att.length * 22;
           return (
-            <div key={g.cards[0]} style={{ position: 'absolute', [top ? 'top' : 'bottom']: 8, left: `calc(50% + ${g.x}px)`, width: g.w, height: g.h + attH } as React.CSSProperties}>
+            <div key={g.cards[0]} style={{ position: 'absolute', [top ? 'top' : 'bottom']: LIFT, left: `calc(50% + ${g.x}px)`, width: g.w, height: g.h + attH } as React.CSSProperties}>
               {g.att.map((a, i) => (
                 BCard({ iid: a, style: { left: 0, top: i * 22, width: cw, height: ch, zIndex: 0 }, showPT: false })
               ))}
