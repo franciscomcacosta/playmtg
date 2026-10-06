@@ -46,10 +46,18 @@
       #seo h2 { font-family: Cinzel, serif; color: #f4efe4; font-size: 20px; margin-top: 28px; }
       #seo a { color: #f0a93b; }
       body { margin: 0; background: #0b0d11; }
+      /* Browsers that run the app never see the crawler text: they get a short loading screen until it starts. */
+      #boot { display: none; }
+      .js #seo { display: none; }
+      .js #boot { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(1400px 900px at 50% 45%, #161a20 0%, #0b0d11 62%, #040506 100%); }
+      #boot span { font-family: Cinzel, serif; font-size: 22px; font-weight: 800; letter-spacing: .42em; color: #f7dc9a; animation: bootPulse 1.4s ease-in-out infinite; }
+      @keyframes bootPulse { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
     </style>
+    <script>document.documentElement.classList.add('js');</script>
   </head>
   <body>
     <div id="root">
+      <div id="boot" aria-hidden="true"><span>PLAYMTG</span></div>
       <!-- Shown until the app loads, and read by search engines. The app replaces it. -->
       <main id="seo">
         <h1>Play MTG online free: Commander, Draft and ranked duels</h1>
