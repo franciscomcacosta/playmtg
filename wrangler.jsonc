@@ -1,0 +1,11 @@
+// The website (playmtg.online) is served by Cloudflare as static files from ./dist.
+// The game server itself runs on the PC behind the tunnel (api.playmtg.online), not here.
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "playmtg",
+  "compatibility_date": "2026-10-06",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
