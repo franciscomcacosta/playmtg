@@ -8,3 +8,4 @@ _design/
 *.log
 .snap-full.txt
 .wrangler/
+data/
