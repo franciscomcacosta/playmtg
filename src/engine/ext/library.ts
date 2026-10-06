@@ -188,10 +188,15 @@ EXT.effects.tapOrUntap = ({ s, item, e, r, you, api }) => {
   if (!c) return 'done';
   if (!r.sub) {
     r.sub = {};
-    api.pushPrompt(s, { id: api.uid(s, 'p'), player: you, kind: 'yesno', title: `${api.nm(s, c)}: tap or untap it?`, options: [{ id: 'yes', label: 'Tap' }, { id: 'no', label: 'Untap' }], cards: [c], data: { ctx: 'resolve' } });
+    // the natural choice is offered first: untap what's tapped, tap what's untapped
+    const nat = s.cards[c].tapped ? 'Untap' : 'Tap';
+    api.pushPrompt(s, { id: api.uid(s, 'p'), player: you, kind: 'yesno', title: `${api.nm(s, c)}: tap or untap it?`, options: [{ id: 'yes', label: nat }, { id: 'no', label: nat === 'Tap' ? 'Untap' : 'Tap' }], cards: [c], data: { ctx: 'resolve' } });
+    r.sub.nat = nat;
     return 'wait';
   }
-  s.cards[c].tapped = r.sub.answered === 'yes';
+  const tapIt = (r.sub.answered === 'yes') === (r.sub.nat === 'Tap');
+  if (s.cards[c].tapped && !tapIt) api.emit(s, 'untapped', { iid: c });
+  s.cards[c].tapped = tapIt;
   return 'done';
 };
 // "Target player draws two cards and loses 2 life."
@@ -202,8 +207,9 @@ EXT.rules.push([/^(target player|target opponent|each player|each opponent|you) 
 }]);
 // "You gain that much life." (after damage)
 EXT.rules.push([/^you gain that much life$/, () => [{ k: 'ext', name: 'gainLast' }]]);
-EXT.effects.gainLast = ({ s, you, api }) => {
-  const n = (s as any).lastDealt ?? 0;
+EXT.effects.gainLast = ({ s, item, you, api }) => {
+  // a trigger that carries its amount ("whenever an opponent loses life, you gain that much") wins over the last damage dealt
+  const n = (item as any).lastCount ?? (s as any).lastDealt ?? 0;
   if (n > 0) api.gainLife(s, you, n);
   return 'done';
 };

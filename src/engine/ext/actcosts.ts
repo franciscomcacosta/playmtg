@@ -102,7 +102,7 @@ EXT.hooks.canActivate.push((s, p, iid, a, api) => {
   return undefined;
 });
 EXT.hooks.castCosts.push((s, pc, api) => {
-  if (pc.kind !== 'ability') return false;
+  if (pc.kind !== 'ability' || !s.cards[pc.iid]) return false;
   const a = api.chars(s, pc.iid).pc.activated[pc.abilityIdx] as any;
   const xs: any[] = a?.cost?.extra ?? [];
   pc.extExtra ??= {};
@@ -119,7 +119,7 @@ EXT.hooks.castCosts.push((s, pc, api) => {
   return false;
 });
 EXT.hooks.castPay.push((s, pc, api) => {
-  if (pc.kind !== 'ability') return;
+  if (pc.kind !== 'ability' || !s.cards[pc.iid]) return;
   const a = api.chars(s, pc.iid)?.pc?.activated?.[pc.abilityIdx] as any;
   const xs: any[] = a?.cost?.extra ?? [];
   const p = pc.player;

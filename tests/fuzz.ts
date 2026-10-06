@@ -45,6 +45,6 @@ for (let g = 0; g < games; g++) {
     while (!s.over && s.turn < 30 && steps++ < 4000) { act(s); if (steps % 50 === 0) viewFor(s, 0); }
     turns += s.turn;
     if (steps >= 4000) console.log('game', g, 'did not finish in steps; turn', s.turn, s.step, s.prompt?.title);
-  } catch (e: any) { crashes++; console.log('CRASH game', g, e.stack?.split('\n').slice(0, 4).join(' | ')); console.log(s.log.slice(-4).map(l=>l.text).join(' / ')); }
+  } catch (e: any) { crashes++; console.log('CRASH game', g, e.stack?.split('\n').slice(0, 12).join(' | ')); console.log(s.log.slice(-4).map(l=>l.text).join(' / ')); }
 }
 console.log({ games, crashes, avgTurns: turns / games });

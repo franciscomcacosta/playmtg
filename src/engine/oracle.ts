@@ -471,6 +471,8 @@ function sentences(s: string): string[] {
     const sub = /target|owner of|controller$/.test(subj) ? 'that player' : subj;
     return `${first} and ${sub} ${verb} `;
   });
+  // "If you do, A, then B": B is still part of the "if you do"
+  q = q.replace(/(^|[.\n]\s*)(if (?:you|they) do(?:n't)?, )([^.\n]*)/g, (_a, pre: string, iff: string, body: string) => pre + iff + body.replace(/, then /g, `. ${iff}`));
   q = q.replace(/, then /g, '. ');
   const parts = q
     .split(/\.(?:\s+|$)|\n+/)
@@ -489,6 +491,11 @@ export function parseFilter(phrase: string): Filter | null {
   const f: Filter = {};
   // "a creature of their choice": who chooses is the effect's business, not the filter's
   p = p.replace(/ of (?:their|his or her|your|its controller's|that player's) choice$/, '');
+  // "creature card with lesser mana value (than the creature that died)" — compared with the trigger's object, else the source
+  {
+    const lm = p.match(/ with lesser (mana value|power|toughness)(?: than (~|it|this creature|that creature|the creature that died|the exiled card|the sacrificed creature))?/);
+    if (lm) { (f as any).lesser = { stat: lm[1] === 'mana value' ? 'cmc' : lm[1], ref: lm[2] === '~' || lm[2] === 'this creature' ? 'self' : 'trigger' }; p = p.replace(lm[0], ''); }
+  }
   if (/ that was dealt damage this turn$/.test(p)) { (f as any).dealtThisTurn = true; p = p.replace(/ that was dealt damage this turn$/, ''); }
   if (/ of the chosen type\b/.test(p)) { f.chosenType = true; p = p.replace(/ of the chosen type\b/, ''); }
   if (/ of the chosen color\b/.test(p)) { f.chosenColor = true; p = p.replace(/ of the chosen color\b/, ''); }
@@ -614,6 +621,7 @@ export function parseFilter(phrase: string): Filter | null {
   const words = p.split(/,? (?:and\/or|or|and) |, /).map((s) => s.trim()).filter(Boolean);
   const types: string[] = [];
   let subGroups = 0, subMulti = false;
+  const groupsSeen: { types: string[]; subs: string[] }[] = [];
   for (let w of words) {
     const parts = w.split(' ');
     const groupStart = types.length;
@@ -659,10 +667,19 @@ export function parseFilter(phrase: string): Filter | null {
     const dSub = (f.subtypes?.length ?? 0) - sub0;
     if (dSub > 0) { subGroups++; if (dSub > 1) subMulti = true; }
     const group = types.slice(groupStart).filter((t) => t !== 'spell');
+    groupsSeen.push({ types: group, subs: (f.subtypes ?? []).slice(sub0) });
     if (group.length > 1) {
       (f as any).allTypes = [...((f as any).allTypes ?? []), ...group];
       types.splice(groupStart, types.length - groupStart, group[group.length - 1]);
     }
+  }
+  // "artifact creature or Vehicle": a multi-type group OR'd with a subtype group is any-of, not all-of
+  if (groupsSeen.length > 1 && groupsSeen.some((g) => g.types.length > 1) && groupsSeen.some((g) => !g.types.length && g.subs.length)) {
+    const base = f.zone === 'stack' ? 'spell' : 'permanent';
+    (f as any).anyOf = groupsSeen.map((g) => (g.types.length > 1 ? { allTypes: g.types, types: [g.types[g.types.length - 1]] } : g.types.length ? { types: g.types } : { subtypes: g.subs, types: [base] }));
+    delete (f as any).allTypes;
+    delete f.subtypes;
+    types.splice(0, types.length, base);
   }
   if (types.length) f.types = types;
   if (subGroups > 1 && !subMulti) (f as any).subAny = true;
@@ -1207,6 +1224,8 @@ const RULES: Rule[] = [
   // tap / untap
   [/^(tap|untap) (.+)$/, (m, ctx) => {
     const s = parseSubject(m[2], ctx);
+    // "tap all creatures your opponents control, then put a stun counter on each of those creatures"
+    if (s && (s as any).t === 'all') ctx.last = s;
     return s ? [m[1] === 'tap' ? { k: 'tap', what: s } : { k: 'untap', what: s }] : null;
   }],
   [/^(?:it|that creature|that permanent|that land|that artifact|they) (?:doesn't|don't) untap during (?:its|their) controllers?'s? next untap steps?$/, (m, ctx) => (ctx.last ? [{ k: 'skipUntap', what: ctx.last }] : null)],
@@ -1342,6 +1361,7 @@ const RULES: Rule[] = [
   // copies
   [new RegExp(`^create ${AMT} (tapped )?tokens? that(?:'s| are) (?:a )?cop(?:y|ies) of (.+?)(?:, except .+)?$`), (m, ctx) => {
     const what = parseSubject(m[3], ctx);
+    if (what) ctx.last = { t: 'lastToken' } as any;
     return what ? [{ k: 'tokenCopy', what, n: amt(m[1]), tapped: !!m[2] }] : null;
   }],
   [/^populate$/, () => [{ k: 'populate' }]],
@@ -2315,7 +2335,7 @@ function keywordTriggers(pc: ParsedCard) {
   if (k.has('annihilator')) T('attacks', [{ k: 'sacrifice', who: { t: 'defending' }, filter: { types: ['permanent'], zone: 'battlefield' }, n: n('annihilator') }], 'Annihilator');
   if (k.has('melee')) T('attacks', [{ k: 'pump', what: self, p: 1, t: 1, kw: [], eot: true }], 'Melee');
   if (k.has('dethrone')) T('attacks', [{ k: 'counters', what: self, counter: '+1/+1', n: 1 }], 'Dethrone', { cond: { k: 'defendingMostLife' } });
-  if (k.has('mentor')) T('attacks', [{ k: 'counters', what: { t: 'target', spec: 0 }, counter: '+1/+1', n: 1 }], 'Mentor', {}, [spec({ types: ['creature'], attacking: true, controller: 'you', other: true }, 1, false, 'target attacking creature with lesser power')]);
+  if (k.has('mentor')) T('attacks', [{ k: 'counters', what: { t: 'target', spec: 0 }, counter: '+1/+1', n: 1 }], 'Mentor', {}, [spec({ types: ['creature'], attacking: true, controller: 'you', other: true, lesser: { stat: 'power', ref: 'self' } } as any, 1, false, 'target attacking creature with lesser power')]);
   if (k.has('training')) T('attacks', [{ k: 'counters', what: self, counter: '+1/+1', n: 1 }], 'Training', { cond: { k: 'trainingPartner' } });
   if (k.has('renown')) T('combatDamagePlayer', [{ k: 'renown', n: n('renown') }], 'Renown', { cond: { k: 'notRenowned' } });
   if (k.has('bloodthirst')) T('etb', [{ k: 'counters', what: self, counter: '+1/+1', n: n('bloodthirst') }], 'Bloodthirst', { cond: { k: 'oppDamaged' } });

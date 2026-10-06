@@ -276,7 +276,7 @@ function mayHaveStatics(state: GameState, o: CardObj): boolean {
 
 const GRANT_BASE = new Set(['keywords', 'triggers', 'activated', 'statics', 'replacements', 'unparsed', 'spell', 'ward', 'kwArgs', 'name']);
 export function baseChars(state: GameState, iid: string): Chars {
-  const card = state.cards[iid];
+  const card = state.cards[iid] ?? (state as any).ghosts?.[iid];
   const def: CardDef = effectiveDef(state, card);
   if (card.faceDown && (card.zone === 'battlefield' || card.zone === 'stack')) {
     const ward = card.morph?.kind === 'disguise' || card.morph?.kind === 'cloak';
@@ -327,7 +327,7 @@ export function baseChars(state: GameState, iid: string): Chars {
  * 1 copy (baseChars) → 2 control (card.controller) → 4 types → 5 colors → 6 abilities → 7a CDA → 7b set P/T → 7c modifications & counters.
  */
 export function chars(state: GameState, iid: string): Chars {
-  const card = state.cards[iid];
+  const card = state.cards[iid] ?? (state as any).ghosts?.[iid];
   const c = baseChars(state, iid);
   if (card.zone !== 'battlefield') return c;
   const mods = [...card.mods].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
@@ -692,7 +692,7 @@ export function matchesFilter(state: GameState, iid: string, f: Filter, you: Pla
   if (f.notTypes) {
     for (const t of f.notTypes) {
       if (t === 'basic' && c.supertypes.has('basic')) return false;
-      if (c.types.has(t) || c.subtypes.has(t)) return false;
+      if (c.types.has(t) || c.subtypes.has(t) || c.supertypes.has(t)) return false;
       if (t === 'token' && card.token) return false;
     }
   }
@@ -701,6 +701,18 @@ export function matchesFilter(state: GameState, iid: string, f: Filter, you: Pla
     if (!t || t.turn !== state.turn) return false;
     if ((f as any).dealtTurn && !t.dealers?.[iid]) return false;
     if ((f as any).dealtYouTurn && !t.dealtTo?.[you]?.[iid]) return false;
+  }
+  if ((f as any).lesser) {
+    const q = (f as any).lesser as { stat: 'cmc' | 'power' | 'toughness'; ref: 'self' | 'trigger' };
+    const pend = (state.pendingCast as any)?.item ?? (state as any).resolving?.item;
+    const ref = q.ref === 'trigger' ? pend?.triggerObj ?? selfIid : selfIid;
+    if (ref && state.cards[ref]) {
+      const rc = state.cards[ref];
+      const lki = (state as any).lkiCache?.[ref];
+      const rv = q.stat === 'cmc' ? chars(state, ref).cmc : rc.zone === 'battlefield' ? (chars(state, ref) as any)[q.stat] : lki?.[q.stat] ?? (chars(state, ref) as any)[q.stat];
+      const cv = q.stat === 'cmc' ? c.cmc : (c as any)[q.stat];
+      if (!(cv < rv)) return false;
+    }
   }
   if ((f as any).ptOr) { const q = (f as any).ptOr; const ok = q.ge ? c.power >= q.n || c.toughness >= q.n : c.power <= q.n || c.toughness <= q.n; if (!ok) return false; }
   if ((f as any).notEnchanted && state.battlefield.some((o) => state.cards[o].attachedTo === iid && baseChars(state, o).subtypes.has('aura'))) return false;

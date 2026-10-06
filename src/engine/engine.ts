@@ -273,6 +273,8 @@ export function moveCard(s: GameState, iid: string, to: MoveTo, opts: { tapped?:
     const ch = chars(s, iid);
     lki = ch.pc;
     lkiCreature = ch.types.has('creature');
+    const batch = (s as any).leaveBatch as Map<string, any> | undefined;
+    if (batch) batch.set(iid, { pc: ch.pc, controller: c.controller });
     ((s as any).lkiCache ??= {})[iid] = { power: ch.power, toughness: ch.toughness, controller: c.controller, types: [...ch.types] };
     endEffectsFrom(s, iid);
     // remove from combat
@@ -292,7 +294,7 @@ export function moveCard(s: GameState, iid: string, to: MoveTo, opts: { tapped?:
   // (a permanent spell copy becomes a token on resolution)
   if ((c as any).cardCopy && to !== 'stack') {
     if (to === 'battlefield') { (c as any).cardCopy = false; c.token = true; }
-    else { delete s.cards[iid]; return; }
+    else { ((s as any).ghosts ??= {})[iid] = c; delete s.cards[iid]; return; }
   }
   // tokens cease to exist outside the battlefield
   if (c.token && from === 'battlefield' && to !== 'battlefield') {
@@ -302,6 +304,8 @@ export function moveCard(s: GameState, iid: string, to: MoveTo, opts: { tapped?:
     if (lki) fireLeave(s, iid, lki, lkiCreature, lkiController, to, lkiCounters);
     emit(s, 'leave', { iid, card: c, to, lki, wasCreature: lkiCreature, controller: lkiController, opts, attached: s.battlefield.filter((o) => s.cards[o]?.attachedTo === iid) });
     (s as any).trigCause = prevCause;
+    // keep last-known info for abilities still being paid for / resolving (a sacrificed Clue, Treasure…)
+    ((s as any).ghosts ??= {})[iid] = c;
     delete s.cards[iid];
     detachDependents(s, iid);
     returnLinkedCards(s, c);
@@ -499,9 +503,12 @@ function fireLeave(s: GameState, iid: string, lki: ParsedCard, wasCreature: bool
     if (t.event === 'ltb' || (t.event === 'dies' && to === 'graveyard' && wasCreature)) queueTrigger(s, iid, controller, t, { lki: true, lkiCounters });
   }
   if (to === 'graveyard' && wasCreature) {
-    for (const oid of observers(s)) {
-      const o = s.cards[oid];
-      const pc = baseChars(s, oid).pc;
+    // permanents on the battlefield, plus ones leaving at the same time (they "look back in time", 603.10a)
+    const batch = (s as any).leaveBatch as Map<string, any> | undefined;
+    const watchers: [string, ParsedCard, PlayerIdx][] = observers(s).map((oid) => [oid, baseChars(s, oid).pc, s.cards[oid].controller]);
+    for (const [oid, b] of batch ?? []) if (oid !== iid && s.cards[oid] && s.cards[oid].zone !== 'battlefield') watchers.push([oid, b.pc, b.controller]);
+    for (const [oid, pc, octrl] of watchers) {
+      const o = { controller: octrl };
       for (const t of pc.triggers) {
         if (t.event !== 'otherDies') continue;
         const f = { ...(t.filter ?? {}), zone: undefined } as Filter;
@@ -1519,7 +1526,7 @@ function advanceCast(s: GameState) {
     if (modes.condMax && (modes.condMax.cond.k === 'kickedCast' ? !!pc.kicker : cmc?.name === 'castFlag' && cmc.flag === 'optPaid' ? !!pc.extOpt?.length : evalCond(s, modes.condMax.cond, p, pc.iid))) modes.max = modes.condMax.max;
     if (modes.repeat) modes.max = pc.ability.modes.max;
     pushPrompt(s, {
-      id: uid(s, 'p'), player: p, kind: 'mode', title: `Choose ${modes.min === modes.max ? modes.min : `${modes.min}–${modes.max}`} mode${modes.max > 1 ? 's' : ''}`,
+      id: uid(s, 'p'), player: p, kind: 'mode', title: `${pc.kind === 'trigger' && (pc.label ?? pc.item?.label) ? (pc.label ?? pc.item?.label) + ': ' : ''}Choose ${modes.min === modes.max ? modes.min : `${modes.min}–${modes.max}`} mode${modes.max > 1 ? 's' : ''}`,
       options: modes.options.map((o: Ability, i: number) => ({ id: String(i), label: o.text })), min: modes.min, max: modes.max, canCancel: pc.kind !== 'trigger', data: { ctx: 'cast' },
       ...(modes.repeat ? { repeat: true } : {}),
     } as any);
@@ -1569,7 +1576,7 @@ function advanceCast(s: GameState) {
         continue;
       }
       pushPrompt(s, {
-        id: uid(s, 'p'), player: p, kind: 'targets', title: `${pc.label}: choose ${sp.upTo ? 'up to ' : ''}${sp.count > 1 ? sp.count + ' ' : ''}${sp.label}`,
+        id: uid(s, 'p'), player: p, kind: 'targets', title: `${pc.label ?? pc.item?.label ?? nm(s, source)}: choose ${sp.upTo ? 'up to ' : ''}${sp.count > 1 ? sp.count + ' ' : ''}${sp.label}`,
         targets: legal, min: sp.upTo ? 0 : sp.divided ? 1 : Math.min(sp.count, legal.length), max: sp.count, canCancel: pc.kind !== 'trigger', data: { ctx: 'cast' },
       });
       return;
@@ -1846,7 +1853,10 @@ function continueResolve(s: GameState) {
   const item: StackItem = r.item;
   while (r.i < item.effects.length) {
     const eff: Effect = item.effects[r.i];
-    const res = execEffect(s, item, eff, r);
+    const hadBatch = !!(s as any).leaveBatch;
+    if (!hadBatch) (s as any).leaveBatch = new Map();
+    let res: ReturnType<typeof execEffect>;
+    try { res = execEffect(s, item, eff, r); } finally { if (!hadBatch) (s as any).leaveBatch = undefined; }
     if (res === 'wait') return;
     r.i++;
     r.sub = null;
@@ -3483,6 +3493,8 @@ function checkSBA(s: GameState): boolean {
       }
     }
   }
+  const hadBatch = !!(s as any).leaveBatch;
+  if (!hadBatch) (s as any).leaveBatch = new Map();
   for (const iid of new Set(toGrave)) {
     if (s.cards[iid]?.zone === 'battlefield') {
       const ch = chars(s, iid);
@@ -3491,6 +3503,7 @@ function checkSBA(s: GameState): boolean {
       changed = true;
     }
   }
+  if (!hadBatch) (s as any).leaveBatch = undefined;
   return changed;
 }
 
@@ -3790,6 +3803,7 @@ function nextTurn(s: GameState) {
     s.active = opp(s.active);
   }
   s.turn++;
+  (s as any).ghosts = undefined;
   log(s, `Turn ${s.turn} — ${pname(s, s.active)}`, s.active, 'turn');
   ev(s, { k: 'turn', p: s.active, turn: s.turn });
   beginStep(s, 'untap');

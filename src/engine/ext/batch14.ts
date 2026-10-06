@@ -2401,7 +2401,8 @@ EXT.rules.push([/^(?:until end of turn, )?(~|it|that creature|target creature(?:
 }]);
 // "Target creature blocks it this turn if able." (it = ~)
 EXT.rules.push([/^(target creature(?: [a-z ]+)?|that creature) blocks (it|~) this turn if able$/, (m, ctx) => {
-  if (m[2] === 'it' && ctx.last && ctx.last.t !== 'self') return null;
+  // only rewrites "it" → "~"; a sentence already using "~" that nothing else parses must not recurse forever
+  if (m[2] !== 'it' || (ctx.last && ctx.last.t !== 'self')) return null;
   return parseSentence(`${m[1]} blocks ~ this turn if able`, ctx);
 }]);
 // "Two target players exchange life totals." / "You and target player exchange life totals."
