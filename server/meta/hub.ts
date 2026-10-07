@@ -774,6 +774,12 @@ export class Hub {
         this.rooms.broadcast(r);
         break;
       }
+      case 'shown': {
+        // the player's screen finished animating up to this event; paced games wait for it
+        const r = s.room;
+        if (r && s.seat >= 0) this.rooms.markShown(r, s.seat, Number(msg.seq));
+        return;
+      }
       case 'deck': {
         const r = s.room;
         if (!r || s.seat < 0) return fail('Not in a room');

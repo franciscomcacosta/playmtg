@@ -35,6 +35,10 @@ export interface Room {
   ranked?: boolean;
   botTimer?: ReturnType<typeof setTimeout>;
   beatTimer?: ReturnType<typeof setTimeout>;
+  /** Per seat: the latest event number that player's screen has finished showing, and when. */
+  shown?: { seq: number; at: number }[];
+  /** Event number right after the bot's last action. */
+  botSeq?: number;
   spectators: Set<WebSocket>;
   paidFor?: GameState | null; // game instance already paid out
   onOver?: (room: Room) => void;
@@ -145,6 +149,7 @@ export class Rooms {
     (room.game as any).beatMark = (room.game as any).evSeq ?? 0;
     clearTimeout(room.beatTimer);
     room.beatTimer = undefined;
+    room.shown = [];
     room.rematchVotes.clear();
   }
 
@@ -177,11 +182,11 @@ export class Rooms {
     this.scheduleBot(room);
   }
 
-  /** Pace multiplier: the slowest setting among the human players (Fast 0.55 · Normal 1 · Slow 1.6). */
+  /** Pace multiplier: the slowest setting among the human players (Fast 0.6 · Normal 1.25 · Slow 1.9). */
   paceOf(room: Room): number {
     const g = room.game;
     if (!g) return 1;
-    const M: Record<string, number> = { fast: 0.55, normal: 1, slow: 1.6 };
+    const M: Record<string, number> = { fast: 0.6, normal: 1.25, slow: 1.9 };
     let m = 0;
     room.seats.forEach((seat, i) => {
       if (!seat || seat.bot) return;
@@ -221,11 +226,42 @@ export class Rooms {
     if (!g || g.over || room.beatTimer) return;
     const b = pendingBeat(g);
     if (!b) return;
-    room.beatTimer = setTimeout(() => {
+    const start = Date.now();
+    const tick = () => {
       room.beatTimer = undefined;
-      if (room.game !== g) return;
+      if (room.game !== g || pendingBeat(g) !== b) return;
+      // wait until every player's screen has finished showing this beat (plus a moment to read it)
+      if (!this.caughtUp(room, b.to, start)) {
+        room.beatTimer = setTimeout(tick, 120);
+        return;
+      }
       if (resumeBeat(g)) this.broadcast(room);
-    }, this.beatMs(room, b.from, b.to));
+    };
+    room.beatTimer = setTimeout(tick, this.beatMs(room, b.from, b.to));
+  }
+
+  /** A player's screen reports it has finished animating up to event `seq`. */
+  markShown(room: Room, seat: number, seq: number) {
+    if (!room.game || !Number.isFinite(seq)) return;
+    (room.shown ??= [])[seat] = { seq, at: Date.now() };
+    const st = room.seats[seat];
+    if (st) (st as any).reportsShown = true;
+  }
+
+  /**
+   * True once every connected human has seen up to `seq` and had a moment to take it in. Screens that never
+   * report (a hidden tab, an old client) are waited on for at most a few seconds after `since`.
+   */
+  caughtUp(room: Room, seq: number, since: number): boolean {
+    const now = Date.now();
+    if (now - since > 6000) return true;
+    const linger = Math.round(450 * this.paceOf(room));
+    return room.seats.every((seat, i) => {
+      // seats whose client never reports what it has shown (an older version of the site) aren't waited on
+      if (!seat || seat.bot || !seat.sockets.size || !(seat as any).reportsShown) return true;
+      const sh = room.shown?.[i];
+      return !!sh && sh.seq >= seq && now - sh.at >= linger;
+    });
   }
 
   /** Let the AI seat act, one decision at a time with a short delay so humans can follow along. */
@@ -242,10 +278,20 @@ export class Rooms {
     if (!aiNeedsToAct(g, idx as PlayerIdx)) return;
     const quick = !g.prompt && g.priority === idx && g.stack.length === 0 && !['main1', 'main2'].includes(g.step);
     // the bot "thinks" a little before main-phase plays and answers, like a person would
-    const think = quick ? 150 : g.prompt ? 600 : 850;
-    room.botTimer = setTimeout(() => {
+    // follow-up steps of something it already started (targets, paying costs) showed nothing new: no second pause
+    const midway = room.botSeq === ((g as any).evSeq ?? 0);
+    const think = quick || midway ? 150 : g.prompt ? 600 : 850;
+    const start = Date.now();
+    const seqNow = (g as any).evSeq ?? 0;
+    const go = () => {
       room.botTimer = undefined;
       if (room.game !== g) return;
+      // don't act while the human is still watching the last thing that happened
+      if (!this.caughtUp(room, seqNow, start)) {
+        room.botTimer = setTimeout(go, 120);
+        return;
+      }
+      if (pendingBeat(g) || !aiNeedsToAct(g, idx as PlayerIdx)) return;
       let acted = 0;
       while (acted++ < 25 && !pendingBeat(g) && aiNeedsToAct(g, idx as PlayerIdx)) {
         let action;
@@ -260,8 +306,10 @@ export class Rooms {
         if (err) aiActionFailed(g, action as Action);
         if (action.type !== 'pass') break;
       }
+      room.botSeq = (g as any).evSeq ?? 0;
       this.broadcast(room);
-    }, Math.round(think * this.paceOf(room)));
+    };
+    room.botTimer = setTimeout(go, Math.round(think * this.paceOf(room)));
   }
 
   /** Which room (and seat) a user is sitting in right now, for presence and rejoining. */

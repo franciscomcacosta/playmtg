@@ -7,6 +7,7 @@ import { Card, cardImage } from './Card';
 import { preload, preloadIdle } from './imgcache';
 import { FX, EXILE_TINT, type Box } from './fx';
 import { searchCards, type ApiCard } from './api';
+import { send } from './store';
 import './board.css';
 
 /** Each seat's equipped cosmetics (from the server's room meta) as CSS: playmat art on that half, card backs on that
@@ -83,6 +84,27 @@ function useViewport() {
   return vp;
 }
 
+/** Resolves once the board's one-off animations (not looping glows) have finished, or after `cap` ms. */
+async function animationsDone(cap: number) {
+  const until = Date.now() + cap;
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  let idle = 0;
+  await wait(60);
+  // animations are often started a little later by timers, so it must stay quiet for two checks in a row
+  while (Date.now() < until && idle < 2) {
+    const running = document.getAnimations().filter((a) => {
+      if (a.playState !== 'running' && !a.pending) return false;
+      const end = a.effect?.getComputedTiming().endTime;
+      return typeof end === 'number' && Number.isFinite(end);
+    });
+    if (running.length) {
+      idle = 0;
+      await Promise.race([Promise.all(running.map((a) => a.finished.catch(() => undefined))), wait(Math.max(0, until - Date.now()))]);
+    } else idle++;
+    await wait(140);
+  }
+}
+
 export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating }: { view: GameView; act: (a: Action) => void; onLeave: () => void; onRematch: () => void; meta?: { seats: any[]; mode?: string | null; ranked?: boolean } | null; spectating?: boolean }) {
   // ------------------------------------------------------------------------------------------
   // Display queue: server views are shown one at a time so animations can play in order.
@@ -133,6 +155,8 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
     return { cards, anchors };
   }, []);
 
+  const spectatingRef = useRef(spectating);
+  spectatingRef.current = spectating;
   const pump = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
@@ -148,7 +172,8 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
           evs = ((nv as any).events ?? []).filter((e: any) => e.seq > lastSeq.current);
           lastSeq.current = seq;
         }
-        const fast = queue.current.length > 2;
+        // only skip animations when updates really pile up (or the tab is in the background)
+        const fast = queue.current.length > 3 || document.hidden;
         // make sure the images of cards that just became visible (a spell cast, a card drawn, a token…) are
         // loaded and decoded before this update is shown, so nothing pops in blank
         {
@@ -172,7 +197,7 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
         const added = nv.stack.filter((s: any) => !oldIds.has(s.id));
         if (added.length && !fast) {
           const ids = added.map((s: any) => s.id);
-          const hold = added.some((s: any) => s.controller !== nv.you) ? 1250 : 650;
+          const hold = added.some((s: any) => s.controller !== nv.you) ? 1900 : 800;
           setFresh((f) => [...f, ...ids]);
           setTimeout(() => setFresh((f) => f.filter((x) => !ids.includes(x))), hold);
         }
@@ -181,6 +206,10 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
           setView(nv);
         });
         if (!fast && evs.some((e) => e.k === 'turn')) await new Promise((r) => setTimeout(r, 450));
+        // let this update's animations finish before showing the next one, then tell the server: paced games
+        // wait for every player's screen before moving on, so nothing happens off-screen
+        if (!fast && evs.length) await animationsDone(3000);
+        if (!spectatingRef.current) send({ t: 'shown', seq });
       }
     } finally {
       busy.current = false;
