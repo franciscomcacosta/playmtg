@@ -215,3 +215,9 @@
 .seg { display: inline-flex; border: 1px solid #2e3a4a; border-radius: 10px; overflow: hidden; width: max-content; }
 .seg button { background: transparent; color: #c8d0dc; border: 0; padding: 6px 14px; font-weight: 700; cursor: pointer; }
 .seg button.on { background: #f0a93b; color: #1a1206; }
+
+/* choice / discard / reveal dialogs: cards big enough to read */
+.modal:has(.choose-grid) { max-width: min(1240px, 96vw); }
+.modal .choose-grid { gap: 14px; }
+.modal .choose-grid > .card { width: clamp(150px, 13.5vw, 215px); height: auto; aspect-ratio: 488 / 680; }
+.modal .choose-grid > .card img { height: 100%; }

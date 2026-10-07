@@ -1008,6 +1008,8 @@ export function Game({ view: incoming, act, onLeave, onRematch, meta, spectating
     for (const b of view.battlefield) {
       const linked = ((cards[b] as any)?.linked ?? []).filter((l: string) => cards[l]?.zone === 'exile');
       if (!linked.length) continue;
+      // "exiled until this leaves" link: only drawn while you hover the card holding it, or a card it exiled
+      if (hover !== b && !linked.includes(hover as string)) continue;
       const se = root.querySelector(`[data-iid="${CSS.escape(b)}"]`);
       const owner = cards[linked[0]].owner;
       const te = root.querySelector(`[data-anchor="ex${owner}"]`);
